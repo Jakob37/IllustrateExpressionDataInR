@@ -77,8 +77,8 @@ library(tidyverse)
 Note that the spaces in the column headers by default automatically are replaced with dots (`.`).
 
 ```{r}
-data_fp <- "spikein_data/nobatch/SpikeinWorkshop_nobatch/differential_expression/SpikeinWorkshop_nobatch/SpikeinWorkshop_nobatch_stats.tsv"
-design_fp <- "spikein_data/nobatch/SpikeinWorkshop_nobatch/differential_expression/input_design.tsv"
+data_fp <- "spikein_data/SpikeinWorkshop_nobatch_stats.tsv"
+design_fp <- "spikein_data/input_design.tsv"
 
 # Tidyverse (readr package)
 full_data_df <- read_tsv(data_fp)
