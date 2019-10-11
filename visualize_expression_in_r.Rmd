@@ -1,0 +1,382 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Introduction
+
+* Why R and not Excel?
+    * I have reluctantly realized that R might not always be better BUT
+    * R is very flexible
+    * R works with large data
+    * R allows rapidly reproduce complex visualizations for many different datasets
+        * Develop it once
+    * There are a package system making many otherwise complex operations available
+
+# Looking for help
+
+* Use the '?' function!
+* Use Google
+* Particularly look for StackOverflow threads - this is a forum which curates good answers to programming questions
+
+# Basic R vs. Tidyverse
+
+* Tidyverse: A collection of packages headed by 'Hadley'
+* Aims at making processing in R easy-to-use
+* 'Why are you telling me this? I like base R'
+    * Preferenses are up to each and everyone
+    * It makes some types of operations nicer for many people
+    * You will never escape base R
+    * Here, I will in some, but not all, cases show both ways (`gather`)
+
+
+## Running NormalyzerDE
+
+Run from `quantitativeproteomics.org/NormalyzerDE`
+
+Without batch correction:
+
+* Log2 transformed
+* Comparing groups 9-8 from design
+
+With batch correction:
+
+* Advanced setting `Batch column` set to `time`
+
+I retrieved the batch values and inserted them in the first matrix.
+
+# The wide- and the long- formats
+
+* We are used to looking at expression data in wide format
+    * One feature per row
+
+# Load required packages
+
+`Tidyverse` contains several packages which will be used here.
+
+* `ggplot2` - Perhaps is most famous package, very popular for visualizations
+* `readr` - Provides functions for reading and writing data
+* `dplyr` - Provides functions for working with datasets
+
+```{r}
+library(tidyverse)
+
+# Could also be loaded separately:
+# library(ggplot2)
+# library(dplyr)
+# library(readr)
+```
+
+# Loading data
+
+* Data obtained from NormalyzerDE
+* The design matrix
+    * Contains your sample setup - information linked to each of your samples
+    * Both biological and technical variables could be tracked here
+
+Note that the spaces in the column headers by default automatically are replaced with dots (`.`).
+
+```{r}
+data_fp <- "spikein_data/nobatch/SpikeinWorkshop_nobatch/differential_expression/SpikeinWorkshop_nobatch/SpikeinWorkshop_nobatch_stats.tsv"
+design_fp <- "spikein_data/nobatch/SpikeinWorkshop_nobatch/differential_expression/input_design.tsv"
+
+# Tidyverse (readr package)
+full_data_df <- read_tsv(data_fp)
+design_df <- read_tsv(design_fp)
+design_df
+
+# Base R
+full_data_df <- read.table(data_fp, sep="\t", header = TRUE)
+design_df <- read.table(design_fp, sep="\t", header = TRUE)
+# IMPORTANT! Otherwise the samples will be seen as numeric, and will give you wrong columns when taking them from the data 
+# full_data_df[, design_df$sample] will not behave as you expect
+design$sample <- as.character(design$sample)
+design$time <- as.character(design$time)
+design$group <- as.factor(design$group)
+```
+
+## Investigate the data
+
+* `str`: Produces a brief summary of the object that is given to it
+* `head`: Retrieve the first `n` rows from a data.frame or matrix, where `n` here is specified to 10
+* `colnames`: Show the column names of the data frame (or matrix)
+
+```{r}
+str(design_df)
+head(design_df, 10)
+colnames(design_df)
+
+str(full_data_df)
+head(full_data_df, 10)
+colnames(full_data_df)
+```
+
+# Study single feature
+
+Let's extract the most strongly significant feature and study it.
+
+```{r}
+best_hit <- full_data_df[order(full_data_df$P.Value), ][1, ]
+best_hit_vals <- best_hit[, as.character(design_df$sample)]
+
+unname(t(best_hit_vals))
+
+best_hit_df <- cbind(value=unname(t(best_hit_vals)), design_df)
+
+ggplot(best_hit_df, aes(x=as.factor(group), y=value)) + geom_point()
+ggplot(best_hit_df, aes(x=as.factor(group), y=value)) + geom_boxplot()
+ggplot(best_hit_df, aes(x=as.factor(group), y=value)) + geom_boxplot() + geom_point()
+ggplot(best_hit_df, aes(x=as.factor(group), y=value)) + geom_violin() + geom_point()
+ggplot(best_hit_df, aes(x=as.factor(group), y=value, color=time)) + geom_boxplot() + geom_point(position=position_jitterdodge())
+
+```
+
+# Preprocessing
+
+Add column specifying whether or not they are significant.
+
+```{r}
+# Store the cutoff as a variable to make the code easier to read and reuse later
+sig_thres <- 0.2
+
+# full_data_df$Pvalue
+
+# Base R
+full_data_df$IsSig <- full_data_df$adj.P.Val < sig_thres
+
+# Tidyverse
+full_data_df <- full_data_df %>% mutate(IsSig = adj.P.Val < sig_thres)
+
+# Inspect the results
+head(full_data_df)
+```
+
+# Inspect the p-values
+
+Let's inspect how many entries we have passing our assigned threshold.
+
+Note the difference in base R the comma placement makes.
+
+* my_df[1:10, ] - will slice out the first ten rows
+* my_df[, 1:10] - will slice out the first ten columns
+
+For base R we must also ensure there is no NA values
+
+```{r}
+# Base R
+# Retrieve all rows where adj.P.Val < sig_thres and count them using nrow
+nrow(full_data_df[full_data_df$adj.P.Val < sig_thres & !is.na(full_data_df$adj.P.Val), ])
+full_data_df[order(full_data_df$P.Value), ]
+
+# Tidyverse
+full_data_df %>% filter(adj.P.Val < sig_thres) %>% nrow()
+full_data_df %>% arrange(P.Value)
+```
+
+# Visualize
+
+I personally dislike the gray background you get in the default ggplot-plots. There are a number of themes that can be assigned
+for different styles. Here, I assign the style `classic` as the global style.
+
+```{r}
+theme_set(theme_classic())
+```
+
+## P-value histogram
+
+For further discussion on its interpretation, see the following link: http://varianceexplained.org/statistics/interpreting-pvalue-histogram/
+
+Special settings:
+
+* geom_histogram - Geometry specifying to do histograms, where we are cutting up a range of data in bins
+* bins - Specify how many segments the data should be separated in
+
+When running this you get a warning "Removed 43 rows containing non-finite values (stat_bin)".
+This is due to missing values in the dataset.
+
+```{r}
+ggplot(full_data_df, aes(x=P.Value)) + geom_histogram(bins=100) 
+```
+
+This can easily be adjusted to other characteristics, such as expression or fold change:
+
+```{r}
+ggplot(full_data_df, aes(x=AvgExpr)) + geom_histogram(bins=100)
+ggplot(full_data_df, aes(x=log2Fold)) + geom_histogram(bins=100)
+```
+
+If you want to color those entries that pass your adjusted p-value threshold,
+you can use the `fill` option. There are two coloring options - `fill` and
+`color`. Which one is applicable depends on the data type.
+
+We see that around half the p-values < 0.01 are found below FDR < 0.2
+
+```{r}
+gray_blue_colors <- c("#AAAAAA", "#0C81A2")
+
+phist_plt <- ggplot(full_data_df, aes(x=P.Value, fill=IsSig)) + geom_histogram(bins=100) + scale_fill_manual(values=gray_blue_colors)
+phist_plt
+```
+
+## Vulcano plot
+
+The Vulcano plot illustrates the regulation patterns within your dataset compared to
+their significance - How clearly they are found to be regulated.
+
+Thinking point: When can we have a large fold change but still have a large p-value?
+
+```{r}
+ggplot(full_data_df, aes(x=log2Fold, y=-log10(P.Value))) + geom_point()
+```
+
+You can color the significant hits here too
+
+```{r}
+ggplot(full_data_df, aes(x=log2Fold, y=-log10(P.Value), color=IsSig)) + geom_point()
+```
+
+You can adjust settings to make it look more 'publication quality'
+
+```{r}
+vulc_plt <- ggplot(full_data_df, aes(x=log2Fold, y=-log10(P.Value), color=IsSig)) + 
+    geom_point(alpha=0.6, na.rm=TRUE) +
+    ggtitle("My vulcano illustration") +
+    xlab("Fold regulation (log2)") +
+    ylab("Significance (-log10)") + 
+    scale_color_manual(values=gray_blue_colors)
+vulc_plt
+```
+
+If we want, we can also label certain points with their protein names.
+
+## MA plot
+
+Very similar to the vulcano plot, with the only difference what we are specifying as x-axis and y-axis.
+
+```{r}
+ma_plt <- ggplot(full_data_df %>% arrange(desc(P.Value)), aes(x=AvgExpr, y=log2Fold, color=IsSig)) + 
+    geom_point(alpha=0.6, na.rm=TRUE) +
+    ggtitle("MA") +
+    xlab("Expression level") +
+    ylab("Fold change (log2)") + 
+    scale_color_manual(values=gray_blue_colors)
+ma_plt
+```
+
+# Preparing data in long format
+
+## Wide vs. long formats
+
+```{r}
+long_data <- full_data_df %>% pivot_longer(as.character(design_df$sample), names_to="sample", values_to="value")
+ggplot(long_data, aes(x=value, color=sample)) + geom_density()
+```
+
+Often we want to color on different conditions to look for patterns in the data.
+Then we need to merge in out design matrix into this long data.
+
+This can be achieved using a `left_join` from the `dplyr` package.
+
+```{r}
+annot_long_data <- long_data %>% left_join(design_df, by="sample")
+```
+
+Now we can investigate patterns using the characteristics from the design matrix.
+
+Note that we need to add the argument `group` for ggplot to realize that each line
+comes from its own sample. Feel free to try what you get without the argument.
+
+```{r}
+ggplot(annot_long_data, aes(x=value, color=time)) + geom_density()
+ggplot(annot_long_data, aes(x=value, color=time, group=sample)) + geom_density()
+ggplot(annot_long_data, aes(x=value, color=as.factor(group))) + geom_density()
+ggplot(annot_long_data, aes(x=value, color=group, group=sample)) + geom_density()
+```
+
+## Boxplot or violins
+
+Using this we can easily make other plots such as boxplots or violins
+
+```{r}
+box_plt <- ggplot(annot_long_data, aes(x=sample, y=value, color=time)) + 
+    geom_boxplot() + 
+    theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+    ggtitle("Sample intensity levels")
+box_plt
+ggplot(annot_long_data, aes(x=sample, y=value, color=time)) + geom_violin()
+```
+
+# Special topics
+
+## Making a multi-pane plot
+
+You often want to combine multiple plots
+
+```{r}
+library(ggpubr)
+ggarrange(ma_plt, vulc_plt)
+ggarrange(ma_plt, vulc_plt, ncol=1)
+grid_plt <- ggarrange(ma_plt, vulc_plt, phist_plt, box_plt, common.legend = TRUE, legend = "right")
+annotated_plt <- annotate_figure(grid_plt, top="Illustrated dataset")
+annotated_plt
+```
+
+## Saving plots to file
+
+```{r}
+ggsave(annotated_plt, filename = "output_path.png")
+```
+
+You can specify the measures, 
+
+```{r}
+ggsave(annotated_plt, filename = "output_path_highres.png", width=10, height=10, dpi = 300)
+```
+
+# Special cases
+
+## Survival curves
+
+What data to use for this?
+
+## Principal component analysis
+
+There are many ways to do principal component analysis visualizations in R.
+The one I find easiest to use is the `PCAtools` package.
+
+Here is a nice vignette for more extensive examples: https://bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html
+
+* removeVar - Removing highly variant features to get a better view of trends
+* scale - Whether all dimensions should be scaled to same size range before calculating importance
+
+```{r fig.width=10,fig.height=10}
+library(PCAtools)
+
+# Biplots for different components and colorings
+# Pairplot
+
+data_df_no_missing <- data_df[complete.cases(data_df), ]
+
+p <- pca(data_df_no_missing, removeVar=0.1, scale=TRUE, metadata=as.matrix(design_df))
+biplot(p, colby = "group")
+biplot(p, colby = "time")
+biplot(p, colby = "time", shape="group", legendPosition = "right")
+
+screeplot(p)
+
+pairsplot(p, colby = "group")
+pairsplot(p, colby = "time")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
