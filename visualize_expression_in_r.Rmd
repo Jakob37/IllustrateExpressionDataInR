@@ -113,6 +113,13 @@ colnames(full_data_df)
 
 # Study single feature
 
+I personally dislike the gray background you get in the default ggplot-plots. There are a number of themes that can be assigned
+for different styles. Here, I assign the style `classic` as the global style.
+
+```{r}
+theme_set(theme_classic())
+```
+
 Let's extract the most strongly significant feature and study it.
 
 ```{r}
@@ -175,12 +182,6 @@ full_data_df %>% arrange(P.Value)
 
 # Visualize
 
-I personally dislike the gray background you get in the default ggplot-plots. There are a number of themes that can be assigned
-for different styles. Here, I assign the style `classic` as the global style.
-
-```{r}
-theme_set(theme_classic())
-```
 
 ## P-value histogram
 
@@ -202,7 +203,7 @@ This can easily be adjusted to other characteristics, such as expression or fold
 
 ```{r}
 ggplot(full_data_df, aes(x=AvgExpr)) + geom_histogram(bins=100)
-ggplot(full_data_df, aes(x=log2Fold)) + geom_histogram(bins=100)
+ggplot(full_data_df, aes(x=log2Fold)) + geom_histogram(bins=100) + xlim(-2.5, 2.5)
 ```
 
 If you want to color those entries that pass your adjusted p-value threshold,
@@ -306,6 +307,14 @@ box_plt
 ggplot(annot_long_data, aes(x=sample, y=value, color=time)) + geom_violin()
 ```
 
+## Barplot
+
+Illustration of total intensities in samples.
+
+```{r}
+ggplot(annot_long_data, aes(x=sample, y=value, fill=time, color=time, width=0.5)) + geom_col() + ylab("Total intensity") + theme(axis.text.x=element_text(angle=90))
+```
+
 # Special topics
 
 ## Making a multi-pane plot
@@ -337,7 +346,45 @@ ggsave(annotated_plt, filename = "output_path_highres.png", width=10, height=10,
 
 ## Survival curves
 
-What data to use for this?
+This is a special request from *Joana*. Thus we need a special dataset here.
+This part of the tutorial is closely following the `survminer` vignette at: https://rpkgs.datanovia.com/survminer/index.html
+
+For this we are using the dataset `lung` found in the `survival` package, containing
+NCCTG lung cancer data.
+
+```{r}
+library(survminer)
+library(survival)
+
+head(lung)
+str(lung)
+
+fit <- survfit(Surv(time, status) ~ sex, data = lung)
+fit
+```
+
+Now we are ready to perform a basic plot. The beauty of using ggplot is that we can 
+apply a lot of what we already have learned, so let's go ahead and add a custom header.
+
+```{r}
+ggsurvplot(fit, data=lung) + ggtitle("NCCTG Lung Cancer Data")
+```
+
+Let's do a more fancy visualization.
+
+```{r}
+ggsurvplot(
+   fit,                     # survfit object with calculated statistics.
+   data = lung,             # data used to fit survival curves.
+   pval = TRUE,             # show p-value of log-rank test.
+   conf.int = TRUE,         # show confidence intervals for 
+                            # point estimates of survival curves.
+   xlim = c(0,500),         # present narrower X axis, but not affect
+                            # survival estimates.
+   xlab = "Time in days",   # customize X axis label.
+   break.time.by = 100     # break X axis in time intervals by 500
+ )
+```
 
 ## Principal component analysis
 
