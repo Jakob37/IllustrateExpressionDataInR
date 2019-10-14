@@ -1,0 +1,7 @@
+# File endings
+*.Rhistory
+*.swp
+
+presentation-figure/
+presentation.Rpres
+old/

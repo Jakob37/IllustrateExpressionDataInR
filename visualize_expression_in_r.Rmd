@@ -90,9 +90,9 @@ full_data_df <- read.table(data_fp, sep="\t", header = TRUE)
 design_df <- read.table(design_fp, sep="\t", header = TRUE)
 # IMPORTANT! Otherwise the samples will be seen as numeric, and will give you wrong columns when taking them from the data 
 # full_data_df[, design_df$sample] will not behave as you expect
-design$sample <- as.character(design$sample)
-design$time <- as.character(design$time)
-design$group <- as.factor(design$group)
+design_df$sample <- as.character(design_df$sample)
+design_df$time <- as.character(design_df$time)
+design_df$group <- as.factor(design_df$group)
 ```
 
 ## Investigate the data
@@ -344,46 +344,31 @@ ggsave(annotated_plt, filename = "output_path_highres.png", width=10, height=10,
 
 # Special cases
 
-## Survival curves
+## Heatmaps
 
-This is a special request from *Joana*. Thus we need a special dataset here.
-This part of the tutorial is closely following the `survminer` vignette at: https://rpkgs.datanovia.com/survminer/index.html
+Source: https://learnr.wordpress.com/2010/01/26/ggplot2-quick-heatmap-plotting/
+Source for base R: https://www.r-graph-gallery.com/heatmap
 
-For this we are using the dataset `lung` found in the `survival` package, containing
-NCCTG lung cancer data.
-
-```{r}
-library(survminer)
-library(survival)
-
-head(lung)
-str(lung)
-
-fit <- survfit(Surv(time, status) ~ sex, data = lung)
-fit
-```
-
-Now we are ready to perform a basic plot. The beauty of using ggplot is that we can 
-apply a lot of what we already have learned, so let's go ahead and add a custom header.
+Heatmaps can be done in ggplot using `geom_tile()`, but in this particular case
+I would recommend using the base R version due to its clustering of the entries.
 
 ```{r}
-ggsurvplot(fit, data=lung) + ggtitle("NCCTG Lung Cancer Data")
-```
+library(tidyverse)
 
-Let's do a more fancy visualization.
+heatmap(data_df %>% head(100) %>% dplyr::select(design_df$sample) %>% as.matrix() %>% na.omit())
 
-```{r}
-ggsurvplot(
-   fit,                     # survfit object with calculated statistics.
-   data = lung,             # data used to fit survival curves.
-   pval = TRUE,             # show p-value of log-rank test.
-   conf.int = TRUE,         # show confidence intervals for 
-                            # point estimates of survival curves.
-   xlim = c(0,500),         # present narrower X axis, but not affect
-                            # survival estimates.
-   xlab = "Time in days",   # customize X axis label.
-   break.time.by = 100     # break X axis in time intervals by 500
- )
+colnames(data_df) <- make.names(colnames(data_df))
+out <- data_df %>%
+    arrange(P.Value) %>% 
+    head(10) %>% 
+    pivot_longer(as.character(design_df$sample), names_to="sample", values_to="value") %>% 
+    filter(!is.na(value))
+head(out)
+
+ggplot(out, aes(sample, External.IDs)) + 
+    geom_tile(aes(fill=value)) + 
+    theme(axis.text.x = element_text(angle=90, vjust=0.5))
+
 ```
 
 ## Principal component analysis
